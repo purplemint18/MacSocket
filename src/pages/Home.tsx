@@ -1,0 +1,54 @@
+import { useState } from "react";
+import { FiUsers } from "react-icons/fi";
+import { useWebSocket } from "../hooks/useWebSocket";
+import { Sidebar } from "../components/Sidebar";
+import { ClientDetail } from "../components/ClientDetail";
+
+const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
+
+export const Home = () => {
+  const { clients, connected, clientDetail, detailLoading, requestClientDetails } =
+    useWebSocket(WS_URL);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+
+  const listClient =
+    clients.find((c) => c.deviceId === selectedDeviceId) ?? null;
+
+  const displayClient =
+    clientDetail?.deviceId === selectedDeviceId ? clientDetail : listClient;
+
+  const handleSelectClient = (deviceId: string) => {
+    setSelectedDeviceId(deviceId);
+    requestClientDetails(deviceId);
+  };
+
+  return (
+    <div className="flex h-screen bg-surface-900">
+      <Sidebar
+        clients={clients}
+        selectedDeviceId={selectedDeviceId}
+        onSelectClient={(client) => handleSelectClient(client.deviceId)}
+        connected={connected}
+      />
+      <main className="flex-1 overflow-auto">
+        {displayClient ? (
+          <div className="p-8">
+            <ClientDetail client={displayClient} loading={detailLoading} />
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full animate-fade-in">
+            <div className="w-20 h-20 rounded-3xl bg-surface-700/50 border border-surface-500/20 flex items-center justify-center mb-6">
+              <FiUsers size={36} strokeWidth={1.2} className="text-surface-300/40" />
+            </div>
+            <p className="text-surface-300/50 text-base font-medium mb-1">
+              No client selected
+            </p>
+            <p className="text-surface-300/30 text-sm">
+              Pick a client from the sidebar to view details
+            </p>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+};
