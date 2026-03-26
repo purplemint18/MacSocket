@@ -5,6 +5,7 @@ import getpass
 import uuid
 import hashlib
 import subprocess
+import shutil
 import os
 import sys
 import ssl
@@ -65,6 +66,79 @@ def get_public_ip() -> str:
 
 def get_username() -> str:
     return getpass.getuser()
+
+
+def get_drives() -> list:
+    """List root-level volumes/drives with disk usage info."""
+    system = platform.system()
+    drives = []
+
+    if system == "Darwin":
+        volumes_dir = "/Volumes"
+        try:
+            for name in sorted(os.listdir(volumes_dir)):
+                vol_path = os.path.join(volumes_dir, name)
+                if not os.path.isdir(vol_path):
+                    continue
+                info = {"name": name, "path": vol_path}
+                try:
+                    usage = shutil.disk_usage(vol_path)
+                    info["total_bytes"] = usage.total
+                    info["used_bytes"] = usage.used
+                    info["free_bytes"] = usage.free
+                except (PermissionError, OSError):
+                    pass
+                drives.append(info)
+        except Exception:
+            pass
+
+    elif system == "Windows":
+        import string
+
+        for letter in string.ascii_uppercase:
+            drive_path = f"{letter}:\\"
+            if os.path.exists(drive_path):
+                info = {"name": f"{letter}:", "path": drive_path}
+                try:
+                    usage = shutil.disk_usage(drive_path)
+                    info["total_bytes"] = usage.total
+                    info["used_bytes"] = usage.used
+                    info["free_bytes"] = usage.free
+                except (PermissionError, OSError):
+                    pass
+                drives.append(info)
+
+    elif system == "Linux":
+        seen_devs = set()
+        try:
+            with open("/proc/mounts") as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) < 2:
+                        continue
+                    dev, mount_point = parts[0], parts[1]
+                    if dev in seen_devs or not mount_point.startswith("/"):
+                        continue
+                    skip_prefixes = ("/sys", "/proc", "/dev", "/run", "/snap")
+                    if any(mount_point.startswith(p) for p in skip_prefixes):
+                        continue
+                    seen_devs.add(dev)
+                    info = {
+                        "name": os.path.basename(mount_point) or "/",
+                        "path": mount_point,
+                    }
+                    try:
+                        usage = shutil.disk_usage(mount_point)
+                        info["total_bytes"] = usage.total
+                        info["used_bytes"] = usage.used
+                        info["free_bytes"] = usage.free
+                    except (PermissionError, OSError):
+                        pass
+                    drives.append(info)
+        except Exception:
+            pass
+
+    return drives
 
 
 def build_ssl_context(url: str) -> ssl.SSLContext | None:
@@ -150,10 +224,11 @@ async def run(url: str):
                                     "public_ip": get_public_ip(),
                                     "username": get_username(),
                                     "request_id": data.get("request_id"),
+                                    "drives": get_drives(),
                                 },
                             }
                             await ws.send(json.dumps(fresh_info))
-                            print(f">> sent fresh info (request {data.get('request_id')})")
+                            print(f">> sent fresh info + {len(fresh_info['data']['drives'])} drives (request {data.get('request_id')})")
 
                 await asyncio.gather(heartbeat(), listen())
 
