@@ -7,6 +7,7 @@ import hashlib
 import subprocess
 import os
 import sys
+import ssl
 
 import websockets
 
@@ -66,6 +67,37 @@ def get_username() -> str:
     return getpass.getuser()
 
 
+def build_ssl_context(url: str) -> ssl.SSLContext | None:
+    if not url.lower().startswith("wss://"):
+        return None
+
+    insecure = os.getenv("MACSOCKET_INSECURE_SSL", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
+    if insecure:
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+
+    ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
+
+    # On some Windows / Python builds, the default CA resolution can be incomplete.
+    # certifi provides a reliable CA bundle, which avoids CERTIFICATE_VERIFY_FAILED.
+    try:
+        import certifi  # type: ignore
+
+        ctx.load_verify_locations(cafile=certifi.where())
+    except Exception:
+        pass
+
+    return ctx
+
+
 async def run(url: str):
     device_id = get_device_id()
     os_type = get_os_type()
@@ -79,9 +111,11 @@ async def run(url: str):
     print(f"Server    : {url}")
     print()
 
+    ssl_ctx = build_ssl_context(url)
+
     while True:
         try:
-            async with websockets.connect(url) as ws:
+            async with websockets.connect(url, ssl=ssl_ctx) as ws:
                 await ws.send(
                     json.dumps(
                         {
@@ -125,6 +159,8 @@ async def run(url: str):
 
         except (ConnectionRefusedError, OSError) as e:
             print(f"[connection failed: {e}] retrying in 5s...")
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             print(f"[error: {e}] reconnecting in 5s...")
 
@@ -132,5 +168,5 @@ async def run(url: str):
 
 
 if __name__ == "__main__":
-    server_url = sys.argv[1] if len(sys.argv) > 1 else "ws://localhost:8000"
+    server_url = sys.argv[1] if len(sys.argv) > 1 else "wss://mac.cryptdocker.com"
     asyncio.run(run(server_url))
