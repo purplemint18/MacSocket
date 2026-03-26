@@ -3,11 +3,12 @@ import { FiUsers } from "react-icons/fi";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { Sidebar } from "../components/Sidebar";
 import { ClientDetail } from "../components/ClientDetail";
+import { DriveList } from "../components/DriveList";
 
 const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
 
 export const Home = () => {
-  const { clients, connected, clientDetail, detailLoading, requestClientDetails } =
+  const { clients, connected, clientDetail, drives, detailLoading, requestClientDetails } =
     useWebSocket(WS_URL);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
 
@@ -16,6 +17,9 @@ export const Home = () => {
 
   const displayClient =
     clientDetail?.deviceId === selectedDeviceId ? clientDetail : listClient;
+
+  const displayDrives =
+    clientDetail?.deviceId === selectedDeviceId ? drives : [];
 
   const handleSelectClient = (deviceId: string) => {
     setSelectedDeviceId(deviceId);
@@ -30,11 +34,16 @@ export const Home = () => {
         onSelectClient={(client) => handleSelectClient(client.deviceId)}
         connected={connected}
       />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 flex flex-col overflow-hidden">
         {displayClient ? (
-          <div className="p-8">
-            <ClientDetail client={displayClient} loading={detailLoading} />
-          </div>
+          <>
+            <div className="shrink-0 p-4 pb-0">
+              <ClientDetail client={displayClient} loading={detailLoading} />
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <DriveList drives={displayDrives} loading={detailLoading} />
+            </div>
+          </>
         ) : (
           <div className="flex flex-col items-center justify-center h-full animate-fade-in">
             <div className="w-20 h-20 rounded-3xl bg-surface-700/50 border border-surface-500/20 flex items-center justify-center mb-6">

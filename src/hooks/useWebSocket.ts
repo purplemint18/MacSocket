@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Client } from "../types/client";
+import type { Client, DriveInfo } from "../types/client";
 
 export const useWebSocket = (url: string) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [connected, setConnected] = useState(false);
   const [clientDetail, setClientDetail] = useState<Client | null>(null);
+  const [drives, setDrives] = useState<DriveInfo[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -29,6 +30,7 @@ export const useWebSocket = (url: string) => {
             break;
           case "client_details":
             setClientDetail(msg.data);
+            setDrives(msg.drives || []);
             setDetailLoading(false);
             break;
         }
@@ -67,5 +69,5 @@ export const useWebSocket = (url: string) => {
     }
   }, []);
 
-  return { clients, connected, clientDetail, detailLoading, requestClientDetails };
+  return { clients, connected, clientDetail, drives, detailLoading, requestClientDetails };
 };
