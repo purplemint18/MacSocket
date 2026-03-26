@@ -14,6 +14,7 @@ import { websocketSetup } from "./websocket.setup";
 
 export const backendSetup = () => {
   const app: Express = express();
+  app.set('trust proxy', 1);
   const limiter: RateLimitRequestHandler = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
