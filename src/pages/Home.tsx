@@ -4,13 +4,27 @@ import { useWebSocket } from "../hooks/useWebSocket";
 import { Sidebar } from "../components/Sidebar";
 import { ClientDetail } from "../components/ClientDetail";
 import { DriveList } from "../components/DriveList";
+import { FileBrowser } from "../components/FileBrowser";
 
 const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
 
 export const Home = () => {
-  const { clients, connected, clientDetail, drives, detailLoading, requestClientDetails } =
-    useWebSocket(WS_URL);
+  const {
+    clients,
+    connected,
+    clientDetail,
+    drives,
+    detailLoading,
+    requestClientDetails,
+    directoryEntries,
+    currentPath,
+    browsingLoading,
+    browsingError,
+    browseDirectory,
+  } = useWebSocket(WS_URL);
+
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [browsing, setBrowsing] = useState(false);
 
   const listClient =
     clients.find((c) => c.deviceId === selectedDeviceId) ?? null;
@@ -22,8 +36,25 @@ export const Home = () => {
     clientDetail?.deviceId === selectedDeviceId ? drives : [];
 
   const handleSelectClient = (deviceId: string) => {
+    console.log("clicked");
     setSelectedDeviceId(deviceId);
+    setBrowsing(false);
     requestClientDetails(deviceId);
+  };
+
+  const handleDriveClick = (path: string) => {
+    if (!selectedDeviceId) return;
+    setBrowsing(true);
+    browseDirectory(selectedDeviceId, path);
+  };
+
+  const handleNavigate = (path: string) => {
+    if (!selectedDeviceId) return;
+    browseDirectory(selectedDeviceId, path);
+  };
+
+  const handleBackToDrives = () => {
+    setBrowsing(false);
   };
 
   return (
@@ -41,7 +72,22 @@ export const Home = () => {
               <ClientDetail client={displayClient} loading={detailLoading} />
             </div>
             <div className="flex-1 overflow-auto p-4">
-              <DriveList drives={displayDrives} loading={detailLoading} />
+              {browsing ? (
+                <FileBrowser
+                  entries={directoryEntries}
+                  currentPath={currentPath || ""}
+                  loading={browsingLoading}
+                  error={browsingError}
+                  onNavigate={handleNavigate}
+                  onBack={handleBackToDrives}
+                />
+              ) : (
+                <DriveList
+                  drives={displayDrives}
+                  loading={detailLoading}
+                  onDriveClick={handleDriveClick}
+                />
+              )}
             </div>
           </>
         ) : (

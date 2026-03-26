@@ -17,3 +17,11 @@ export interface DriveInfo {
   used_bytes?: number;
   free_bytes?: number;
 }
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number | null;
+  modified: string | null;
+}

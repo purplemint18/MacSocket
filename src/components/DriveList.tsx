@@ -4,6 +4,7 @@ import type { DriveInfo } from "../types/client";
 interface DriveListProps {
   drives: DriveInfo[];
   loading?: boolean;
+  onDriveClick?: (path: string) => void;
 }
 
 const formatBytes = (bytes: number): string => {
@@ -20,7 +21,7 @@ const usageColor = (percent: number) => {
   return { bar: "bg-accent-400", text: "text-accent-400", glow: "shadow-accent-400/20" };
 };
 
-export const DriveList = ({ drives, loading }: DriveListProps) => {
+export const DriveList = ({ drives, loading, onDriveClick }: DriveListProps) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -57,14 +58,19 @@ export const DriveList = ({ drives, loading }: DriveListProps) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {drives.map((drive, i) => (
-          <DriveCard key={drive.path || i} drive={drive} index={i} />
+          <DriveCard
+            key={drive.path || i}
+            drive={drive}
+            index={i}
+            onClick={onDriveClick ? () => onDriveClick(drive.path) : undefined}
+          />
         ))}
       </div>
     </div>
   );
 };
 
-const DriveCard = ({ drive, index }: { drive: DriveInfo; index: number }) => {
+const DriveCard = ({ drive, index, onClick }: { drive: DriveInfo; index: number; onClick?: () => void }) => {
   const hasUsage =
     drive.total_bytes != null &&
     drive.used_bytes != null &&
@@ -78,7 +84,8 @@ const DriveCard = ({ drive, index }: { drive: DriveInfo; index: number }) => {
 
   return (
     <div
-      className="glass-card p-4 animate-slide-in"
+      onClick={onClick}
+      className={`glass-card p-4 animate-slide-in ${onClick ? "cursor-pointer hover:border-accent-400/40" : ""}`}
       style={{ animationDelay: `${index * 50}ms` }}
     >
       <div className="flex items-start gap-3 mb-3">

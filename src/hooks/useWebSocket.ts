@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Client, DriveInfo } from "../types/client";
+import type { Client, DriveInfo, FileEntry } from "../types/client";
 
 export const useWebSocket = (url: string) => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -7,6 +7,10 @@ export const useWebSocket = (url: string) => {
   const [clientDetail, setClientDetail] = useState<Client | null>(null);
   const [drives, setDrives] = useState<DriveInfo[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [directoryEntries, setDirectoryEntries] = useState<FileEntry[]>([]);
+  const [currentPath, setCurrentPath] = useState<string | null>(null);
+  const [browsingLoading, setBrowsingLoading] = useState(false);
+  const [browsingError, setBrowsingError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -32,6 +36,12 @@ export const useWebSocket = (url: string) => {
             setClientDetail(msg.data);
             setDrives(msg.drives || []);
             setDetailLoading(false);
+            break;
+          case "directory_listing":
+            setDirectoryEntries(msg.data.entries || []);
+            setCurrentPath(msg.data.path || null);
+            setBrowsingError(msg.data.error || null);
+            setBrowsingLoading(false);
             break;
         }
       };
@@ -60,6 +70,9 @@ export const useWebSocket = (url: string) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       setDetailLoading(true);
+      setCurrentPath(null);
+      setDirectoryEntries([]);
+      setBrowsingError(null);
       ws.send(
         JSON.stringify({
           type: "get_client_details",
@@ -69,5 +82,31 @@ export const useWebSocket = (url: string) => {
     }
   }, []);
 
-  return { clients, connected, clientDetail, drives, detailLoading, requestClientDetails };
+  const browseDirectory = useCallback((deviceId: string, path: string) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      setBrowsingLoading(true);
+      setBrowsingError(null);
+      ws.send(
+        JSON.stringify({
+          type: "browse_directory",
+          data: { device_id: deviceId, path },
+        })
+      );
+    }
+  }, []);
+
+  return {
+    clients,
+    connected,
+    clientDetail,
+    drives,
+    detailLoading,
+    requestClientDetails,
+    directoryEntries,
+    currentPath,
+    browsingLoading,
+    browsingError,
+    browseDirectory,
+  };
 };
