@@ -180,6 +180,74 @@ export const websocketSetup = (server: Server) => {
             break;
           }
 
+          case "browse_directory": {
+            const { device_id: browseDeviceId, path: browsePath } = msg.data;
+            const browseClientWs = clientSockets.get(browseDeviceId);
+
+            if (browseClientWs && browseClientWs.readyState === WebSocket.OPEN) {
+              const requestId = `dir_${++requestCounter}`;
+
+              const timer = setTimeout(() => {
+                pendingRequests.delete(requestId);
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(
+                    JSON.stringify({
+                      type: "directory_listing",
+                      data: { path: browsePath, entries: [], error: "Request timed out" },
+                    }),
+                  );
+                }
+                Logger.warn(`Directory request ${requestId} timed out`);
+              }, 10000);
+
+              pendingRequests.set(requestId, {
+                frontendWs: ws,
+                deviceId: browseDeviceId,
+                timer,
+              });
+
+              browseClientWs.send(
+                JSON.stringify({
+                  type: "request_directory",
+                  request_id: requestId,
+                  path: browsePath,
+                }),
+              );
+              Logger.info(
+                `Forwarded directory request to ${browseDeviceId}: ${browsePath} (${requestId})`,
+              );
+            } else {
+              ws.send(
+                JSON.stringify({
+                  type: "directory_listing",
+                  data: { path: browsePath, entries: [], error: "Client is offline" },
+                }),
+              );
+            }
+            break;
+          }
+
+          case "directory_response": {
+            const { request_id: dirReqId, path: dirPath, entries, error: dirError } = msg.data;
+            const dirPending = pendingRequests.get(dirReqId);
+            if (dirPending) {
+              clearTimeout(dirPending.timer);
+              pendingRequests.delete(dirReqId);
+              if (dirPending.frontendWs.readyState === WebSocket.OPEN) {
+                dirPending.frontendWs.send(
+                  JSON.stringify({
+                    type: "directory_listing",
+                    data: { path: dirPath, entries: entries || [], error: dirError },
+                  }),
+                );
+              }
+              Logger.info(
+                `Directory listing sent for ${dirPath} (${dirReqId})`,
+              );
+            }
+            break;
+          }
+
           case "heartbeat": {
             ws.isAlive = true;
             if (ws.deviceId) {
