@@ -198,7 +198,7 @@ export const websocketSetup = (server: Server) => {
                   );
                 }
                 Logger.warn(`Directory request ${requestId} timed out`);
-              }, 10000);
+              }, 60000);
 
               pendingRequests.set(requestId, {
                 frontendWs: ws,
