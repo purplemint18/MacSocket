@@ -9,6 +9,7 @@ import shutil
 import os
 import sys
 import ssl
+from datetime import datetime
 
 import websockets
 
@@ -141,6 +142,32 @@ def get_drives() -> list:
     return drives
 
 
+def list_directory(dir_path: str) -> dict:
+    """List files and folders in a directory with metadata."""
+    entries = []
+    try:
+        for name in os.listdir(dir_path):
+            full_path = os.path.join(dir_path, name)
+            entry = {"name": name, "path": full_path, "is_dir": False, "size": None, "modified": None}
+            try:
+                stat = os.stat(full_path, follow_symlinks=False)
+                entry["is_dir"] = os.path.isdir(full_path)
+                entry["size"] = stat.st_size if not entry["is_dir"] else None
+                entry["modified"] = datetime.fromtimestamp(stat.st_mtime).isoformat()
+            except (PermissionError, OSError):
+                pass
+            entries.append(entry)
+    except PermissionError:
+        return {"path": dir_path, "entries": [], "error": "Permission denied"}
+    except FileNotFoundError:
+        return {"path": dir_path, "entries": [], "error": "Path not found"}
+    except Exception as e:
+        return {"path": dir_path, "entries": [], "error": str(e)}
+
+    entries.sort(key=lambda e: (not e["is_dir"], e["name"].lower()))
+    return {"path": dir_path, "entries": entries}
+
+
 def build_ssl_context(url: str) -> ssl.SSLContext | None:
     if not url.lower().startswith("wss://"):
         return None
@@ -229,6 +256,21 @@ async def run(url: str):
                             }
                             await ws.send(json.dumps(fresh_info))
                             print(f">> sent fresh info + {len(fresh_info['data']['drives'])} drives (request {data.get('request_id')})")
+
+                        elif data.get("type") == "request_directory":
+                            req_path = data.get("path", "/")
+                            result = list_directory(req_path)
+                            response = {
+                                "type": "directory_response",
+                                "data": {
+                                    "request_id": data.get("request_id"),
+                                    "path": result["path"],
+                                    "entries": result["entries"],
+                                    "error": result.get("error"),
+                                },
+                            }
+                            await ws.send(json.dumps(response))
+                            print(f">> sent directory listing for {req_path}: {len(result['entries'])} entries (request {data.get('request_id')})")
 
                 await asyncio.gather(heartbeat(), listen())
 
