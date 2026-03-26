@@ -76,7 +76,7 @@ export const websocketSetup = (server: Server) => {
               JSON.stringify({
                 type: "connected",
                 data: { message: "Registered successfully" },
-              })
+              }),
             );
             await broadcastToFrontends();
             Logger.info(`Client connected: ${device_id}`);
@@ -105,12 +105,14 @@ export const websocketSetup = (server: Server) => {
                   await clientService.getClientByDeviceId(device_id);
                 if (ws.readyState === WebSocket.OPEN) {
                   ws.send(
-                    JSON.stringify({ type: "client_details", data: fallback })
+                    JSON.stringify({
+                      type: "client_details",
+                      data: fallback,
+                      drives: [],
+                    }),
                   );
                 }
-                Logger.warn(
-                  `Request ${requestId} timed out, sent DB fallback`
-                );
+                Logger.warn(`Request ${requestId} timed out, sent DB fallback`);
               }, 10000);
 
               pendingRequests.set(requestId, {
@@ -120,16 +122,19 @@ export const websocketSetup = (server: Server) => {
               });
 
               clientWs.send(
-                JSON.stringify({ type: "request_info", request_id: requestId })
+                JSON.stringify({ type: "request_info", request_id: requestId }),
               );
               Logger.info(
-                `Forwarded info request to client ${device_id} (${requestId})`
+                `Forwarded info request to client ${device_id} (${requestId})`,
               );
             } else {
-              const client =
-                await clientService.getClientByDeviceId(device_id);
+              const client = await clientService.getClientByDeviceId(device_id);
               ws.send(
-                JSON.stringify({ type: "client_details", data: client })
+                JSON.stringify({
+                  type: "client_details",
+                  data: client,
+                  drives: [],
+                }),
               );
             }
             break;
@@ -142,6 +147,7 @@ export const websocketSetup = (server: Server) => {
               public_ip,
               username,
               request_id,
+              drives,
             } = msg.data;
 
             const pending = pendingRequests.get(request_id);
@@ -156,17 +162,19 @@ export const websocketSetup = (server: Server) => {
                 username,
               });
 
-              if (
-                pending.frontendWs.readyState === WebSocket.OPEN
-              ) {
+              if (pending.frontendWs.readyState === WebSocket.OPEN) {
                 pending.frontendWs.send(
-                  JSON.stringify({ type: "client_details", data: updated })
+                  JSON.stringify({
+                    type: "client_details",
+                    data: updated,
+                    drives: drives || [],
+                  }),
                 );
               }
 
               await broadcastToFrontends();
               Logger.info(
-                `Fresh data stored and sent for ${device_id} (${request_id})`
+                `Fresh data stored and sent for ${device_id} (${request_id})`,
               );
             }
             break;
