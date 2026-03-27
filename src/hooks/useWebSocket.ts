@@ -18,12 +18,19 @@ export const useWebSocket = (url: string) => {
     let stopped = false;
 
     const connect = () => {
+      let socketHeartbeat: ReturnType<typeof setInterval> | undefined;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
         ws.send(JSON.stringify({ type: "frontend_connect" }));
         setConnected(true);
+
+        socketHeartbeat = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "frontend" }));
+          }
+        }, 15_000);
       };
 
       ws.onmessage = (event) => {
@@ -47,8 +54,11 @@ export const useWebSocket = (url: string) => {
       };
 
       ws.onclose = () => {
-        setConnected(false);
+        if (socketHeartbeat) clearInterval(socketHeartbeat);
+        // Ignore close of a socket we already replaced (stale onclose must not null the new ref).
+        if (wsRef.current !== ws) return;
         wsRef.current = null;
+        setConnected(false);
         if (!stopped) {
           reconnectTimeout = setTimeout(connect, 3000);
         }

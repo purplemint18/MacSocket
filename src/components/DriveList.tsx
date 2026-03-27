@@ -5,6 +5,7 @@ interface DriveListProps {
   drives: DriveInfo[];
   loading?: boolean;
   onDriveClick?: (path: string) => void;
+  onVolumesClick?: () => void;
 }
 
 const formatBytes = (bytes: number): string => {
@@ -21,7 +22,12 @@ const usageColor = (percent: number) => {
   return { bar: "bg-accent-400", text: "text-accent-400", glow: "shadow-accent-400/20" };
 };
 
-export const DriveList = ({ drives, loading, onDriveClick }: DriveListProps) => {
+export const DriveList = ({
+  drives,
+  loading,
+  onDriveClick,
+  onVolumesClick,
+}: DriveListProps) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -50,9 +56,19 @@ export const DriveList = ({ drives, loading, onDriveClick }: DriveListProps) => 
     <div className="animate-fade-in">
       <div className="flex items-center gap-2 mb-4">
         <FiHardDrive size={18} className="text-surface-300/70" />
-        <h3 className="text-sm font-semibold text-surface-300/90 uppercase tracking-wider">
-          Volumes
-        </h3>
+        {onVolumesClick ? (
+          <button
+            type="button"
+            onClick={onVolumesClick}
+            className="text-sm font-semibold text-surface-300/90 uppercase tracking-wider hover:text-accent-400 transition-colors cursor-pointer"
+          >
+            Volumes
+          </button>
+        ) : (
+          <h3 className="text-sm font-semibold text-surface-300/90 uppercase tracking-wider">
+            Volumes
+          </h3>
+        )}
         <span className="text-xs text-surface-300/40 ml-1">{drives.length}</span>
       </div>
 

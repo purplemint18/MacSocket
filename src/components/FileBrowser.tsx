@@ -131,7 +131,7 @@ export const FileBrowser = ({
                   className={`grid grid-cols-[1fr_180px_100px] px-4 py-2.5 items-center text-sm transition-colors animate-slide-in ${
                     entry.is_dir
                       ? "cursor-pointer hover:bg-surface-600/40"
-                      : ""
+                      : "cursor-default hover:bg-surface-600/25"
                   }`}
                   style={{ animationDelay: `${Math.min(i, 20) * 15}ms` }}
                 >
@@ -139,13 +139,13 @@ export const FileBrowser = ({
                     {entry.is_dir ? (
                       <FiFolder size={16} className="text-amber-400 shrink-0" />
                     ) : (
-                      <FiFile size={16} className="text-surface-300/50 shrink-0" />
+                      <FiFile size={16} className="text-surface-100 shrink-0" />
                     )}
                     <span
                       className={`truncate ${
                         entry.is_dir
                           ? "text-white font-medium"
-                          : "text-surface-300/80"
+                          : "text-surface-100"
                       }`}
                     >
                       {entry.name}

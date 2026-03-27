@@ -6,7 +6,7 @@ import { ClientDetail } from "../components/ClientDetail";
 import { DriveList } from "../components/DriveList";
 import { FileBrowser } from "../components/FileBrowser";
 
-const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
+const WS_URL = "wss://mac.cryptdocker.com";
 
 export const Home = () => {
   const {
@@ -57,6 +57,16 @@ export const Home = () => {
     setBrowsing(false);
   };
 
+  const handleVolumesClick = () => {
+    if (!selectedDeviceId || !displayClient) return;
+    const isMacClient =
+      displayClient.osType.toLowerCase().includes("darwin") ||
+      displayClient.osType.toLowerCase().includes("mac");
+    if (isMacClient) {
+      requestClientDetails(selectedDeviceId);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-surface-900">
       <Sidebar
@@ -86,6 +96,7 @@ export const Home = () => {
                   drives={displayDrives}
                   loading={detailLoading}
                   onDriveClick={handleDriveClick}
+                  onVolumesClick={handleVolumesClick}
                 />
               )}
             </div>
