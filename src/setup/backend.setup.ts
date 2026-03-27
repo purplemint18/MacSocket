@@ -56,10 +56,15 @@ export const backendSetup = () => {
   app.get("/api/s3-download", async (req: Request, res: Response) => {
     try {
       const key = typeof req.query.key === "string" ? req.query.key : "";
+      const filename =
+        typeof req.query.filename === "string" ? req.query.filename : "";
       if (!key) {
         return res.status(400).json({ message: "Missing key query parameter" });
       }
-      const signedUrl = await s3Service.getPresignedDownloadUrl(key);
+      const signedUrl = await s3Service.getPresignedDownloadUrl(
+        key,
+        filename || undefined,
+      );
       return res.redirect(signedUrl);
     } catch (error) {
       Logger.error("Failed to create S3 download URL", error);

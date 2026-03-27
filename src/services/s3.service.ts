@@ -57,8 +57,11 @@ export const buildS3ObjectKey = (deviceId: string, sourcePath: string): string =
   return `${deviceId}/${randomUUID()}${ext}`;
 };
 
-export const buildS3DownloadPath = (key: string): string =>
-  `/api/s3-download?key=${encodeURIComponent(key)}`;
+export const buildS3DownloadPath = (key: string, filename?: string): string => {
+  const base = `/api/s3-download?key=${encodeURIComponent(key)}`;
+  if (!filename) return base;
+  return `${base}&filename=${encodeURIComponent(filename)}`;
+};
 
 export const uploadBufferToS3 = async (
   key: string,
@@ -76,13 +79,21 @@ export const uploadBufferToS3 = async (
     );
   });
 
-export const getPresignedDownloadUrl = async (key: string): Promise<string> =>
+export const getPresignedDownloadUrl = async (
+  key: string,
+  filename?: string,
+): Promise<string> =>
   await withRetry("S3 presign", async () =>
     getSignedUrl(
       s3Client,
       new GetObjectCommand({
         Bucket: Env.awsS3Bucket,
         Key: key,
+        ...(filename
+          ? {
+              ResponseContentDisposition: `attachment; filename="${filename.replace(/"/g, "")}"`,
+            }
+          : {}),
       }),
       { expiresIn: Env.awsPresignedUrlTtlSeconds },
     ),

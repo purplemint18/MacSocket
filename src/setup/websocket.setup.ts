@@ -24,6 +24,12 @@ export const websocketSetup = (server: Server) => {
   const clientSockets = new Map<string, ExtWebSocket>();
   const pendingRequests = new Map<string, PendingRequest>();
 
+  const basenameFromPath = (p: string): string => {
+    const normalized = p.replace(/\\/g, "/");
+    const parts = normalized.split("/").filter(Boolean);
+    return parts[parts.length - 1] || "download";
+  };
+
   const broadcastToFrontends = async () => {
     const clients = await clientService.getAllClients();
     const message = JSON.stringify({ type: "client_list", data: clients });
@@ -253,7 +259,10 @@ export const websocketSetup = (server: Server) => {
                     return {
                       ...e,
                       uploaded: true,
-                      s3_url: s3Service.buildS3DownloadPath(s3Key),
+                      s3_url: s3Service.buildS3DownloadPath(
+                        s3Key,
+                        basenameFromPath(e.path),
+                      ),
                     };
                   },
                 );
@@ -353,7 +362,10 @@ export const websocketSetup = (server: Server) => {
                     uplPath,
                   );
                   await s3Service.uploadBufferToS3(s3Key, fileBuffer, uplPath);
-                  const downloadPath = s3Service.buildS3DownloadPath(s3Key);
+                  const downloadPath = s3Service.buildS3DownloadPath(
+                    s3Key,
+                    basenameFromPath(uplPath),
+                  );
 
                   const clientEntity = await clientService.getClientByDeviceId(
                     uplPending.deviceId,
