@@ -1,5 +1,6 @@
 import { FiGlobe, FiMonitor, FiUser, FiClock } from "react-icons/fi";
 import { LuFingerprint } from "react-icons/lu";
+import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
 import type { Client } from "../types/client";
 
 interface ClientDetailProps {
@@ -20,15 +21,41 @@ const timeSince = (dateStr: string) => {
 };
 
 export const ClientDetail = ({ client, loading }: ClientDetailProps) => {
-  const initial = client.username?.charAt(0)?.toUpperCase() || "?";
+  const os = (client.osType || "").toLowerCase();
+  const osKind =
+    os.includes("darwin") || os.includes("mac") || os.includes("os x")
+        ? "mac"
+        : os.includes("windows") || os.includes("win32") || os.includes("winnt")
+          ? "windows"
+        : os.includes("linux") || os.includes("ubuntu") || os.includes("debian") || os.includes("fedora")
+          ? "linux"
+          : "other";
 
   return (
     <div className="glass-card px-5 py-3 animate-fade-in">
       <div className="flex items-center gap-4 flex-wrap">
         {/* Avatar + Name */}
         <div className="flex items-center gap-3 shrink-0">
-          <div className="w-9 h-9 rounded-xl bg-accent-400/15 flex items-center justify-center text-base font-bold text-accent-400">
-            {initial}
+          <div
+            className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+              osKind === "windows"
+                ? "bg-sky-500/15 text-sky-300"
+                : osKind === "mac"
+                  ? "bg-surface-600/50 text-surface-100"
+                  : osKind === "linux"
+                    ? "bg-amber-500/15 text-amber-300"
+                    : "bg-accent-400/15 text-accent-300"
+            }`}
+          >
+            {osKind === "windows" ? (
+              <FaWindows size={18} />
+            ) : osKind === "mac" ? (
+              <FaApple size={18} />
+            ) : osKind === "linux" ? (
+              <FaLinux size={18} />
+            ) : (
+              <FiMonitor size={18} />
+            )}
           </div>
           <div className="flex items-center gap-2">
             <h2 className="text-base font-bold text-white">{client.username}</h2>

@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { FiDownloadCloud, FiFolderPlus, FiGlobe, FiSearch, FiUsers } from "react-icons/fi";
+import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
 import type { Client } from "../types/client";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 
@@ -11,20 +12,46 @@ interface SidebarProps {
   connected: boolean;
 }
 
-const Avatar = ({ name, isOnline }: { name: string; isOnline: boolean }) => {
-  const initial = name?.charAt(0)?.toUpperCase() || "?";
-  const hues = [260, 210, 340, 160, 30, 190, 290, 10];
-  const hue = hues[name.charCodeAt(0) % hues.length];
+const getOsKind = (osType: string) => {
+  const v = (osType || "").toLowerCase();
+  if (v.includes("darwin") || v.includes("mac") || v.includes("os x")) return "mac";
+  // NOTE: "darwin" includes "win" — keep Windows checks strict.
+  if (v.includes("windows") || v.includes("win32") || v.includes("winnt")) return "windows";
+  if (v.includes("linux") || v.includes("ubuntu") || v.includes("debian") || v.includes("fedora")) return "linux";
+  return "other";
+};
+
+const Avatar = ({
+  osType,
+  isOnline,
+}: {
+  osType: string;
+  isOnline: boolean;
+}) => {
+  const kind = getOsKind(osType);
 
   return (
     <div className="relative shrink-0">
       <div
-        className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-semibold text-white"
-        style={{
-          background: `linear-gradient(135deg, hsl(${hue}, 60%, 45%), hsl(${hue + 30}, 50%, 35%))`,
-        }}
+        className={`w-9 h-9 rounded-xl flex items-center justify-center text-white ${
+          kind === "windows"
+            ? "bg-sky-500/15 text-sky-300"
+            : kind === "mac"
+              ? "bg-surface-600/50 text-surface-100"
+              : kind === "linux"
+                ? "bg-amber-500/15 text-amber-300"
+                : "bg-accent-400/15 text-accent-300"
+        }`}
       >
-        {initial}
+        {kind === "windows" ? (
+          <FaWindows size={18} />
+        ) : kind === "mac" ? (
+          <FaApple size={18} />
+        ) : kind === "linux" ? (
+          <FaLinux size={18} />
+        ) : (
+          <FiGlobe size={18} />
+        )}
       </div>
       <span
         className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-800 ${
@@ -146,7 +173,7 @@ export const Sidebar = ({
                 }`}
                 style={{ animationDelay: `${i * 30}ms` }}
               >
-                <Avatar name={client.username} isOnline={client.isOnline} />
+                <Avatar osType={client.osType} isOnline={client.isOnline} />
                 <div className="min-w-0 flex-1">
                   <p
                     className={`text-sm font-medium truncate ${
