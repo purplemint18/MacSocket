@@ -11,6 +11,7 @@ import swaggerUi from "swagger-ui-express";
 import swaggerConfig from "@/swaggerConfig";
 import rateLimit, { RateLimitRequestHandler } from "express-rate-limit";
 import { websocketSetup } from "./websocket.setup";
+import { join } from "path";
 
 export const backendSetup = () => {
   const app: Express = express();
@@ -51,6 +52,8 @@ export const backendSetup = () => {
   app.use("/health", (_req: Request, res: Response) =>
     res.send(MESSAGE.SERVER.HELLO_WORLD)
   );
+
+  app.use("/api/uploads", express.static(join(process.cwd(), "uploads")));
 
   app.use("/api", appRouter);
 

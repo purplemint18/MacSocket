@@ -1,7 +1,13 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { Server } from "http";
-import { clientService } from "@/services";
+import { clientService, uploadService } from "@/services";
 import { Logger } from "@/utils";
+import { randomUUID } from "crypto";
+import { writeFileSync, mkdirSync, existsSync } from "fs";
+import { join } from "path";
+
+const UPLOADS_DIR = join(process.cwd(), "uploads");
+if (!existsSync(UPLOADS_DIR)) mkdirSync(UPLOADS_DIR, { recursive: true });
 
 interface ExtWebSocket extends WebSocket {
   deviceId?: string;
@@ -233,16 +239,246 @@ export const websocketSetup = (server: Server) => {
             if (dirPending) {
               clearTimeout(dirPending.timer);
               pendingRequests.delete(dirReqId);
+
+              let enrichedEntries = entries || [];
+              try {
+                const filePaths = enrichedEntries
+                  .filter((e: { is_dir: boolean }) => !e.is_dir)
+                  .map((e: { path: string }) => e.path);
+                const uploads = await uploadService.getUploadsByDeviceAndPaths(
+                  dirPending.deviceId,
+                  filePaths,
+                );
+                const uploadMap = new Map(uploads.map((u) => [u.url, u.s3Url]));
+                enrichedEntries = enrichedEntries.map(
+                  (e: { is_dir: boolean; path: string }) => ({
+                    ...e,
+                    uploaded: !e.is_dir && uploadMap.has(e.path),
+                    s3_url: uploadMap.get(e.path) || null,
+                  }),
+                );
+              } catch (err) {
+                Logger.error("Failed to enrich entries with upload status:", err);
+              }
+
               if (dirPending.frontendWs.readyState === WebSocket.OPEN) {
                 dirPending.frontendWs.send(
                   JSON.stringify({
                     type: "directory_listing",
-                    data: { path: dirPath, entries: entries || [], error: dirError },
+                    data: { path: dirPath, entries: enrichedEntries, error: dirError },
                   }),
                 );
               }
               Logger.info(
                 `Directory listing sent for ${dirPath} (${dirReqId})`,
+              );
+            }
+            break;
+          }
+
+          case "upload_file": {
+            const { device_id: uploadDeviceId, path: uploadPath } = msg.data;
+            const uploadClientWs = clientSockets.get(uploadDeviceId);
+
+            if (uploadClientWs && uploadClientWs.readyState === WebSocket.OPEN) {
+              const requestId = `upl_${++requestCounter}`;
+
+              const timer = setTimeout(() => {
+                pendingRequests.delete(requestId);
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(
+                    JSON.stringify({
+                      type: "upload_complete",
+                      data: { path: uploadPath, success: false, error: "Request timed out" },
+                    }),
+                  );
+                }
+                Logger.warn(`Upload request ${requestId} timed out`);
+              }, 120000);
+
+              pendingRequests.set(requestId, {
+                frontendWs: ws,
+                deviceId: uploadDeviceId,
+                timer,
+              });
+
+              uploadClientWs.send(
+                JSON.stringify({
+                  type: "request_upload",
+                  request_id: requestId,
+                  path: uploadPath,
+                }),
+              );
+              Logger.info(
+                `Forwarded upload request to ${uploadDeviceId}: ${uploadPath} (${requestId})`,
+              );
+            } else {
+              ws.send(
+                JSON.stringify({
+                  type: "upload_complete",
+                  data: { path: uploadPath, success: false, error: "Client is offline" },
+                }),
+              );
+            }
+            break;
+          }
+
+          case "upload_response": {
+            const {
+              request_id: uplReqId,
+              path: uplPath,
+              file_data,
+              file_size: uplFileSize,
+              error: uplError,
+            } = msg.data;
+            const uplPending = pendingRequests.get(uplReqId);
+            if (uplPending) {
+              clearTimeout(uplPending.timer);
+              pendingRequests.delete(uplReqId);
+
+              if (uplError || !file_data) {
+                if (uplPending.frontendWs.readyState === WebSocket.OPEN) {
+                  uplPending.frontendWs.send(
+                    JSON.stringify({
+                      type: "upload_complete",
+                      data: { path: uplPath, success: false, error: uplError || "No file data" },
+                    }),
+                  );
+                }
+              } else {
+                try {
+                  const fileBuffer = Buffer.from(file_data, "base64");
+                  const ext = uplPath.includes(".")
+                    ? "." + uplPath.split(".").pop()
+                    : "";
+                  const storedName = `${randomUUID()}${ext}`;
+                  writeFileSync(join(UPLOADS_DIR, storedName), fileBuffer);
+
+                  const s3Url = `/api/uploads/${storedName}`;
+
+                  const clientEntity = await clientService.getClientByDeviceId(
+                    uplPending.deviceId,
+                  );
+
+                  await uploadService.createUpload({
+                    os: clientEntity?.osType || "unknown",
+                    deviceId: uplPending.deviceId,
+                    url: uplPath,
+                    s3Url,
+                    fileSize: uplFileSize || fileBuffer.length,
+                  });
+
+                  if (uplPending.frontendWs.readyState === WebSocket.OPEN) {
+                    uplPending.frontendWs.send(
+                      JSON.stringify({
+                        type: "upload_complete",
+                        data: {
+                          path: uplPath,
+                          success: true,
+                          s3_url: s3Url,
+                          file_size: uplFileSize || fileBuffer.length,
+                        },
+                      }),
+                    );
+                  }
+                  Logger.info(
+                    `File uploaded and stored: ${uplPath} → ${storedName} (${uplReqId})`,
+                  );
+                } catch (err) {
+                  Logger.error("Failed to store uploaded file:", err);
+                  if (uplPending.frontendWs.readyState === WebSocket.OPEN) {
+                    uplPending.frontendWs.send(
+                      JSON.stringify({
+                        type: "upload_complete",
+                        data: { path: uplPath, success: false, error: "Server storage error" },
+                      }),
+                    );
+                  }
+                }
+              }
+            }
+            break;
+          }
+
+          case "delete_file": {
+            const { device_id: delDeviceId, path: delPath, is_dir: delIsDir } = msg.data;
+            const delClientWs = clientSockets.get(delDeviceId);
+
+            if (delClientWs && delClientWs.readyState === WebSocket.OPEN) {
+              const requestId = `del_${++requestCounter}`;
+
+              const timer = setTimeout(() => {
+                pendingRequests.delete(requestId);
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(
+                    JSON.stringify({
+                      type: "delete_complete",
+                      data: { path: delPath, success: false, error: "Request timed out" },
+                    }),
+                  );
+                }
+                Logger.warn(`Delete request ${requestId} timed out`);
+              }, 60000);
+
+              pendingRequests.set(requestId, {
+                frontendWs: ws,
+                deviceId: delDeviceId,
+                timer,
+              });
+
+              delClientWs.send(
+                JSON.stringify({
+                  type: "request_delete",
+                  request_id: requestId,
+                  path: delPath,
+                  is_dir: delIsDir,
+                }),
+              );
+              Logger.info(
+                `Forwarded delete request to ${delDeviceId}: ${delPath} (${requestId})`,
+              );
+            } else {
+              ws.send(
+                JSON.stringify({
+                  type: "delete_complete",
+                  data: { path: delPath, success: false, error: "Client is offline" },
+                }),
+              );
+            }
+            break;
+          }
+
+          case "delete_response": {
+            const {
+              request_id: delReqId,
+              path: deletedPath,
+              success: delSuccess,
+              error: delError,
+            } = msg.data;
+            const delPending = pendingRequests.get(delReqId);
+            if (delPending) {
+              clearTimeout(delPending.timer);
+              pendingRequests.delete(delReqId);
+
+              if (delSuccess) {
+                try {
+                  await uploadService.deleteUploadByPath(
+                    delPending.deviceId,
+                    deletedPath,
+                  );
+                } catch (_) {}
+              }
+
+              if (delPending.frontendWs.readyState === WebSocket.OPEN) {
+                delPending.frontendWs.send(
+                  JSON.stringify({
+                    type: "delete_complete",
+                    data: { path: deletedPath, success: delSuccess, error: delError },
+                  }),
+                );
+              }
+              Logger.info(
+                `Delete ${delSuccess ? "succeeded" : "failed"} for ${deletedPath} (${delReqId})`,
               );
             }
             break;
