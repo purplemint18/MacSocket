@@ -1,13 +1,30 @@
-import { FiFolder, FiFile, FiChevronRight, FiArrowLeft, FiAlertCircle } from "react-icons/fi";
+import { useState, useCallback } from "react";
+import {
+  FiFolder,
+  FiFile,
+  FiChevronRight,
+  FiArrowLeft,
+  FiAlertCircle,
+  FiUploadCloud,
+  FiDownload,
+  FiTrash2,
+  FiFolderPlus,
+} from "react-icons/fi";
 import type { FileEntry } from "../types/client";
+import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 
 interface FileBrowserProps {
   entries: FileEntry[];
   currentPath: string;
   loading?: boolean;
   error?: string | null;
+  uploading?: boolean;
+  deleting?: boolean;
   onNavigate: (path: string) => void;
   onBack: () => void;
+  onUpload?: (path: string) => void;
+  onDelete?: (path: string, isDir: boolean) => void;
+  onDownload?: (s3Url: string) => void;
 }
 
 const formatBytes = (bytes: number): string => {
@@ -51,15 +68,75 @@ const pathSegments = (path: string) => {
   return segments;
 };
 
+interface ContextState {
+  x: number;
+  y: number;
+  entry: FileEntry;
+}
+
 export const FileBrowser = ({
   entries,
   currentPath,
   loading,
   error,
+  uploading,
+  deleting,
   onNavigate,
   onBack,
+  onUpload,
+  onDelete,
+  onDownload,
 }: FileBrowserProps) => {
   const segments = pathSegments(currentPath);
+  const [contextMenu, setContextMenu] = useState<ContextState | null>(null);
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent, entry: FileEntry) => {
+      e.preventDefault();
+      setContextMenu({ x: e.clientX, y: e.clientY, entry });
+    },
+    []
+  );
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  const getContextMenuItems = (entry: FileEntry): ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [];
+
+    if (entry.is_dir) {
+      items.push({
+        label: "Open",
+        icon: <FiFolderPlus size={14} />,
+        onClick: () => onNavigate(entry.path),
+      });
+    } else {
+      if (entry.uploaded && entry.s3_url && onDownload) {
+        items.push({
+          label: "Download",
+          icon: <FiDownload size={14} />,
+          onClick: () => onDownload(entry.s3_url!),
+        });
+      }
+      if (onUpload) {
+        items.push({
+          label: "Upload to cloud",
+          icon: <FiUploadCloud size={14} />,
+          onClick: () => onUpload(entry.path),
+        });
+      }
+    }
+
+    if (onDelete) {
+      items.push({
+        label: "Delete",
+        icon: <FiTrash2 size={14} />,
+        onClick: () => onDelete(entry.path, entry.is_dir),
+        danger: true,
+      });
+    }
+
+    return items;
+  };
 
   return (
     <div className="animate-fade-in">
@@ -91,6 +168,16 @@ export const FileBrowser = ({
           </span>
         ))}
       </div>
+
+      {/* Status indicators */}
+      {(uploading || deleting) && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-accent-400/10 border border-accent-400/20 mb-4">
+          <div className="w-4 h-4 border-2 border-accent-400/30 border-t-accent-400 rounded-full animate-spin" />
+          <span className="text-xs text-accent-400">
+            {uploading ? "Uploading file to cloud..." : "Deleting..."}
+          </span>
+        </div>
+      )}
 
       {/* Loading */}
       {loading && (
@@ -128,6 +215,7 @@ export const FileBrowser = ({
                 <div
                   key={entry.path || i}
                   onClick={entry.is_dir ? () => onNavigate(entry.path) : undefined}
+                  onContextMenu={(e) => handleContextMenu(e, entry)}
                   className={`grid grid-cols-[1fr_180px_100px] px-4 py-2.5 items-center text-sm transition-colors animate-slide-in ${
                     entry.is_dir
                       ? "cursor-pointer hover:bg-surface-600/40"
@@ -139,17 +227,30 @@ export const FileBrowser = ({
                     {entry.is_dir ? (
                       <FiFolder size={16} className="text-amber-400 shrink-0" />
                     ) : (
-                      <FiFile size={16} className="text-surface-100 shrink-0" />
+                      <FiFile
+                        size={16}
+                        className={`shrink-0 ${
+                          entry.uploaded ? "text-emerald-400" : "text-surface-100"
+                        }`}
+                      />
                     )}
                     <span
                       className={`truncate ${
                         entry.is_dir
                           ? "text-white font-medium"
-                          : "text-surface-100"
+                          : entry.uploaded
+                            ? "text-emerald-400 font-medium"
+                            : "text-surface-100"
                       }`}
                     >
                       {entry.name}
                     </span>
+                    {entry.uploaded && (
+                      <FiUploadCloud
+                        size={13}
+                        className="text-emerald-400/60 shrink-0"
+                      />
+                    )}
                   </div>
                   <span className="text-xs text-surface-300/50">
                     {formatDate(entry.modified)}
@@ -162,6 +263,16 @@ export const FileBrowser = ({
             </div>
           )}
         </div>
+      )}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={getContextMenuItems(contextMenu.entry)}
+          onClose={closeContextMenu}
+        />
       )}
     </div>
   );

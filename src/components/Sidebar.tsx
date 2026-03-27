@@ -1,11 +1,13 @@
-import { useState } from "react";
-import { FiGlobe, FiSearch, FiUsers } from "react-icons/fi";
+import { useCallback, useState } from "react";
+import { FiDownloadCloud, FiFolderPlus, FiGlobe, FiSearch, FiUsers } from "react-icons/fi";
 import type { Client } from "../types/client";
+import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 
 interface SidebarProps {
   clients: Client[];
   selectedDeviceId: string | null;
   onSelectClient: (client: Client) => void;
+  onOpenDownloadList: (client: Client) => void;
   connected: boolean;
 }
 
@@ -37,9 +39,15 @@ export const Sidebar = ({
   clients,
   selectedDeviceId,
   onSelectClient,
+  onOpenDownloadList,
   connected,
 }: SidebarProps) => {
   const [search, setSearch] = useState("");
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    client: Client;
+  } | null>(null);
   const onlineCount = clients.filter((c) => c.isOnline).length;
 
   const filtered = clients.filter(
@@ -50,6 +58,29 @@ export const Sidebar = ({
 
   const sorted = [...filtered].sort(
     (a, b) => (b.isOnline ? 1 : 0) - (a.isOnline ? 1 : 0)
+  );
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  const openClientMenu = useCallback((e: React.MouseEvent, client: Client) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, client });
+  }, []);
+
+  const getClientMenuItems = useCallback(
+    (client: Client): ContextMenuItem[] => [
+      {
+        label: "Open",
+        icon: <FiFolderPlus size={14} />,
+        onClick: () => onSelectClient(client),
+      },
+      {
+        label: "Download list",
+        icon: <FiDownloadCloud size={14} />,
+        onClick: () => onOpenDownloadList(client),
+      },
+    ],
+    [onOpenDownloadList, onSelectClient]
   );
 
   return (
@@ -107,6 +138,7 @@ export const Sidebar = ({
               <li
                 key={client.deviceId}
                 onClick={() => onSelectClient(client)}
+                onContextMenu={(e) => openClientMenu(e, client)}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all animate-slide-in group ${
                   selectedDeviceId === client.deviceId
                     ? "bg-accent-400/12 border border-accent-400/20"
@@ -143,6 +175,15 @@ export const Sidebar = ({
           </ul>
         )}
       </div>
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={getClientMenuItems(contextMenu.client)}
+          onClose={closeContextMenu}
+        />
+      )}
     </aside>
   );
 };

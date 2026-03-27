@@ -62,6 +62,11 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes context-menu-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 @keyframes slide-in {
   from { opacity: 0; transform: translateX(-12px); }
   to { opacity: 1; transform: translateX(0); }
@@ -69,6 +74,10 @@ body {
 
 .animate-fade-in {
   animation: fade-in 0.4s ease-out both;
+}
+
+.animate-context-menu-in {
+  animation: context-menu-in 0.12s ease-out both;
 }
 
 .animate-slide-in {

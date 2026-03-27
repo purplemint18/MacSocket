@@ -24,4 +24,6 @@ export interface FileEntry {
   is_dir: boolean;
   size: number | null;
   modified: string | null;
+  uploaded?: boolean;
+  s3_url?: string | null;
 }
