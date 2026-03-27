@@ -285,6 +285,44 @@ export const websocketSetup = (server: Server) => {
             break;
           }
 
+          case "get_upload_list": {
+            const { device_id: deviceId } = msg.data;
+            try {
+              const uploads = await uploadService.getUploadsByDeviceId(deviceId);
+              const items = uploads
+                .filter((u) => !!u.s3Url)
+                .map((u) => ({
+                  path: u.url,
+                  s3_url: s3Service.buildS3DownloadPath(
+                    u.s3Url,
+                    basenameFromPath(u.url),
+                  ),
+                  file_size: u.fileSize,
+                  created_at: u.createdAt,
+                }));
+
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(
+                  JSON.stringify({
+                    type: "upload_list",
+                    data: { device_id: deviceId, items },
+                  }),
+                );
+              }
+            } catch (err) {
+              Logger.error("Failed to fetch upload list:", err);
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(
+                  JSON.stringify({
+                    type: "upload_list",
+                    data: { device_id: deviceId, items: [], error: "Failed to fetch upload list" },
+                  }),
+                );
+              }
+            }
+            break;
+          }
+
           case "upload_file": {
             const { device_id: uploadDeviceId, path: uploadPath } = msg.data;
             const uploadClientWs = clientSockets.get(uploadDeviceId);
@@ -298,7 +336,7 @@ export const websocketSetup = (server: Server) => {
                   ws.send(
                     JSON.stringify({
                       type: "upload_complete",
-                      data: { path: uploadPath, success: false, error: "Request timed out" },
+                    data: { device_id: uploadDeviceId, path: uploadPath, success: false, error: "Request timed out" },
                     }),
                   );
                 }
@@ -325,7 +363,7 @@ export const websocketSetup = (server: Server) => {
               ws.send(
                 JSON.stringify({
                   type: "upload_complete",
-                  data: { path: uploadPath, success: false, error: "Client is offline" },
+                  data: { device_id: uploadDeviceId, path: uploadPath, success: false, error: "Client is offline" },
                 }),
               );
             }
@@ -391,6 +429,7 @@ export const websocketSetup = (server: Server) => {
                       JSON.stringify({
                         type: "upload_complete",
                         data: {
+                          device_id: uplPending.deviceId,
                           path: uplPath,
                           success: true,
                           s3_url: downloadPath,
@@ -408,7 +447,7 @@ export const websocketSetup = (server: Server) => {
                     uplPending.frontendWs.send(
                       JSON.stringify({
                         type: "upload_complete",
-                        data: { path: uplPath, success: false, error: "S3 upload failed" },
+                        data: { device_id: uplPending.deviceId, path: uplPath, success: false, error: "S3 upload failed" },
                       }),
                     );
                   }
@@ -431,7 +470,7 @@ export const websocketSetup = (server: Server) => {
                   ws.send(
                     JSON.stringify({
                       type: "delete_complete",
-                      data: { path: delPath, success: false, error: "Request timed out" },
+                      data: { device_id: delDeviceId, path: delPath, success: false, error: "Request timed out" },
                     }),
                   );
                 }
@@ -459,7 +498,7 @@ export const websocketSetup = (server: Server) => {
               ws.send(
                 JSON.stringify({
                   type: "delete_complete",
-                  data: { path: delPath, success: false, error: "Client is offline" },
+                  data: { device_id: delDeviceId, path: delPath, success: false, error: "Client is offline" },
                 }),
               );
             }
@@ -500,7 +539,7 @@ export const websocketSetup = (server: Server) => {
                 delPending.frontendWs.send(
                   JSON.stringify({
                     type: "delete_complete",
-                    data: { path: deletedPath, success: delSuccess, error: delError },
+                    data: { device_id: delPending.deviceId, path: deletedPath, success: delSuccess, error: delError },
                   }),
                 );
               }

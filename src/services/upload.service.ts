@@ -60,3 +60,14 @@ export const deleteUploadByPath = async (
     AppDataSource.getRepository(UploadEntity);
   await repo.delete({ deviceId, url });
 };
+
+export const getUploadsByDeviceId = async (
+  deviceId: string,
+): Promise<UploadEntity[]> => {
+  const repo: Repository<UploadEntity> =
+    AppDataSource.getRepository(UploadEntity);
+  return await repo.find({
+    where: { deviceId },
+    order: { createdAt: "DESC" as const },
+  });
+};
