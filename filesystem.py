@@ -1,6 +1,8 @@
+import base64
 import json
 import os
 import platform
+import shutil
 import subprocess
 from datetime import datetime
 
@@ -137,3 +139,35 @@ def list_directory(dir_path: str) -> dict:
     if platform.system() == "Darwin":
         return _list_directory_applescript(dir_path)
     return _list_directory_os(dir_path)
+
+
+def read_file_base64(file_path: str) -> dict:
+    """Read a file and return its content as base64."""
+    try:
+        stat = os.stat(file_path)
+        file_size = stat.st_size
+        with open(file_path, "rb") as f:
+            data = base64.b64encode(f.read()).decode("ascii")
+        return {"file_data": data, "file_size": file_size}
+    except PermissionError:
+        return {"error": "Permission denied"}
+    except FileNotFoundError:
+        return {"error": "File not found"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def delete_path(target_path: str, is_dir: bool = False) -> dict:
+    """Delete a file or directory."""
+    try:
+        if is_dir:
+            shutil.rmtree(target_path)
+        else:
+            os.remove(target_path)
+        return {"success": True}
+    except PermissionError:
+        return {"success": False, "error": "Permission denied"}
+    except FileNotFoundError:
+        return {"success": False, "error": "Path not found"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}

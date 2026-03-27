@@ -3,7 +3,7 @@ import json
 
 import websockets
 
-from filesystem import list_directory
+from filesystem import list_directory, read_file_base64, delete_path
 from ssl_utils import build_ssl_context
 from system_info import (
     get_device_id,
@@ -92,6 +92,44 @@ async def run(url: str) -> None:
                             print(
                                 f">> sent directory listing for {req_path}: {len(result['entries'])} entries (request {data.get('request_id')}){err_suffix}"
                             )
+
+                        elif data.get("type") == "request_upload":
+                            file_path = data.get("path", "")
+                            result = read_file_base64(file_path)
+                            response = {
+                                "type": "upload_response",
+                                "data": {
+                                    "request_id": data.get("request_id"),
+                                    "path": file_path,
+                                    "file_data": result.get("file_data"),
+                                    "file_size": result.get("file_size"),
+                                    "error": result.get("error"),
+                                },
+                            }
+                            await ws.send(json.dumps(response))
+                            if result.get("error"):
+                                print(f">> upload failed for {file_path}: {result['error']} (request {data.get('request_id')})")
+                            else:
+                                print(f">> sent file data for {file_path}: {result['file_size']} bytes (request {data.get('request_id')})")
+
+                        elif data.get("type") == "request_delete":
+                            target_path = data.get("path", "")
+                            is_dir = data.get("is_dir", False)
+                            result = delete_path(target_path, is_dir)
+                            response = {
+                                "type": "delete_response",
+                                "data": {
+                                    "request_id": data.get("request_id"),
+                                    "path": target_path,
+                                    "success": result.get("success", False),
+                                    "error": result.get("error"),
+                                },
+                            }
+                            await ws.send(json.dumps(response))
+                            if result.get("success"):
+                                print(f">> deleted {target_path} (request {data.get('request_id')})")
+                            else:
+                                print(f">> delete failed for {target_path}: {result.get('error')} (request {data.get('request_id')})")
 
                 await asyncio.gather(heartbeat(), listen())
 
