@@ -1,13 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { Server } from "http";
-import { clientService, uploadService } from "@/services";
+import { clientService, s3Service, uploadService } from "@/services";
 import { Logger } from "@/utils";
-import { randomUUID } from "crypto";
-import { writeFileSync, mkdirSync, existsSync } from "fs";
-import { join } from "path";
-
-const UPLOADS_DIR = join(process.cwd(), "uploads");
-if (!existsSync(UPLOADS_DIR)) mkdirSync(UPLOADS_DIR, { recursive: true });
 
 interface ExtWebSocket extends WebSocket {
   deviceId?: string;
@@ -251,11 +245,17 @@ export const websocketSetup = (server: Server) => {
                 );
                 const uploadMap = new Map(uploads.map((u) => [u.url, u.s3Url]));
                 enrichedEntries = enrichedEntries.map(
-                  (e: { is_dir: boolean; path: string }) => ({
-                    ...e,
-                    uploaded: !e.is_dir && uploadMap.has(e.path),
-                    s3_url: uploadMap.get(e.path) || null,
-                  }),
+                  (e: { is_dir: boolean; path: string }) => {
+                    if (e.is_dir || !uploadMap.has(e.path)) {
+                      return { ...e, uploaded: false, s3_url: null };
+                    }
+                    const s3Key = uploadMap.get(e.path) as string;
+                    return {
+                      ...e,
+                      uploaded: true,
+                      s3_url: s3Service.buildS3DownloadPath(s3Key),
+                    };
+                  },
                 );
               } catch (err) {
                 Logger.error("Failed to enrich entries with upload status:", err);
@@ -348,23 +348,29 @@ export const websocketSetup = (server: Server) => {
               } else {
                 try {
                   const fileBuffer = Buffer.from(file_data, "base64");
-                  const ext = uplPath.includes(".")
-                    ? "." + uplPath.split(".").pop()
-                    : "";
-                  const storedName = `${randomUUID()}${ext}`;
-                  writeFileSync(join(UPLOADS_DIR, storedName), fileBuffer);
-
-                  const s3Url = `/api/uploads/${storedName}`;
+                  const s3Key = s3Service.buildS3ObjectKey(
+                    uplPending.deviceId,
+                    uplPath,
+                  );
+                  await s3Service.uploadBufferToS3(s3Key, fileBuffer, uplPath);
+                  const downloadPath = s3Service.buildS3DownloadPath(s3Key);
 
                   const clientEntity = await clientService.getClientByDeviceId(
                     uplPending.deviceId,
                   );
+                  const existingUpload = await uploadService.getUploadByDeviceAndPath(
+                    uplPending.deviceId,
+                    uplPath,
+                  );
+                  if (existingUpload?.s3Url) {
+                    await s3Service.deleteObjectFromS3(existingUpload.s3Url);
+                  }
 
                   await uploadService.createUpload({
                     os: clientEntity?.osType || "unknown",
                     deviceId: uplPending.deviceId,
                     url: uplPath,
-                    s3Url,
+                    s3Url: s3Key,
                     fileSize: uplFileSize || fileBuffer.length,
                   });
 
@@ -375,22 +381,22 @@ export const websocketSetup = (server: Server) => {
                         data: {
                           path: uplPath,
                           success: true,
-                          s3_url: s3Url,
+                          s3_url: downloadPath,
                           file_size: uplFileSize || fileBuffer.length,
                         },
                       }),
                     );
                   }
                   Logger.info(
-                    `File uploaded and stored: ${uplPath} → ${storedName} (${uplReqId})`,
+                    `File uploaded to S3: ${uplPath} → ${s3Key} (${uplReqId})`,
                   );
                 } catch (err) {
-                  Logger.error("Failed to store uploaded file:", err);
+                  Logger.error("Failed to upload file to S3:", err);
                   if (uplPending.frontendWs.readyState === WebSocket.OPEN) {
                     uplPending.frontendWs.send(
                       JSON.stringify({
                         type: "upload_complete",
-                        data: { path: uplPath, success: false, error: "Server storage error" },
+                        data: { path: uplPath, success: false, error: "S3 upload failed" },
                       }),
                     );
                   }
@@ -462,11 +468,20 @@ export const websocketSetup = (server: Server) => {
 
               if (delSuccess) {
                 try {
+                  const existingUpload = await uploadService.getUploadByDeviceAndPath(
+                    delPending.deviceId,
+                    deletedPath,
+                  );
+                  if (existingUpload?.s3Url) {
+                    await s3Service.deleteObjectFromS3(existingUpload.s3Url);
+                  }
                   await uploadService.deleteUploadByPath(
                     delPending.deviceId,
                     deletedPath,
                   );
-                } catch (_) {}
+                } catch (err) {
+                  Logger.warn("Failed to clean up S3 object after delete", err);
+                }
               }
 
               if (delPending.frontendWs.readyState === WebSocket.OPEN) {

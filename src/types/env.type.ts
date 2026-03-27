@@ -11,4 +11,9 @@ export type EnvType = {
   emailPassword: string;
   serverAddress: string;
   resetUrl: string;
+  awsRegion: string;
+  awsAccessKeyId: string;
+  awsSecretAccessKey: string;
+  awsS3Bucket: string;
+  awsPresignedUrlTtlSeconds: number;
 }

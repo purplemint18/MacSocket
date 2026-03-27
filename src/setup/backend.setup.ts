@@ -7,11 +7,11 @@ import { Logger } from "@/utils";
 import { MESSAGE } from "@/consts";
 import appRouter from "@/routers";
 import { errorHandlerMiddleware, routeMiddleware } from "@/middlewares";
+import { s3Service } from "@/services";
 import swaggerUi from "swagger-ui-express";
 import swaggerConfig from "@/swaggerConfig";
 import rateLimit, { RateLimitRequestHandler } from "express-rate-limit";
 import { websocketSetup } from "./websocket.setup";
-import { join } from "path";
 
 export const backendSetup = () => {
   const app: Express = express();
@@ -53,7 +53,19 @@ export const backendSetup = () => {
     res.send(MESSAGE.SERVER.HELLO_WORLD)
   );
 
-  app.use("/api/uploads", express.static(join(process.cwd(), "uploads")));
+  app.get("/api/s3-download", async (req: Request, res: Response) => {
+    try {
+      const key = typeof req.query.key === "string" ? req.query.key : "";
+      if (!key) {
+        return res.status(400).json({ message: "Missing key query parameter" });
+      }
+      const signedUrl = await s3Service.getPresignedDownloadUrl(key);
+      return res.redirect(signedUrl);
+    } catch (error) {
+      Logger.error("Failed to create S3 download URL", error);
+      return res.status(500).json({ message: "Failed to generate download URL" });
+    }
+  });
 
   app.use("/api", appRouter);
 
