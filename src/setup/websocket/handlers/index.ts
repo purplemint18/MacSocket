@@ -4,4 +4,5 @@ export * from "./directory";
 export * from "./deletes";
 export * from "./frontendConnect";
 export * from "./heartbeat";
+export * from "./injectFile";
 export * from "./uploads";

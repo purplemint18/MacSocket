@@ -13,6 +13,8 @@ import {
   handleGetUploadList,
   handleUploadFile,
   handleUploadResponse,
+  handleInjectFile,
+  handleInjectResponse,
 } from "./handlers";
 
 export const handleMessage = async (
@@ -55,6 +57,12 @@ export const handleMessage = async (
       return;
     case "delete_response":
       await handleDeleteResponse(ctx, ws, msg.data);
+      return;
+    case "inject_file":
+      await handleInjectFile(ctx, ws, msg.data);
+      return;
+    case "inject_response":
+      await handleInjectResponse(ctx, ws, msg.data);
       return;
     case "heartbeat":
       await handleHeartbeat(ws);
