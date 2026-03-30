@@ -4,6 +4,7 @@ import os
 import platform
 import shutil
 import subprocess
+import tempfile
 from datetime import datetime
 
 _APPLESCRIPT_LIST_DIR = r"""
@@ -155,6 +156,94 @@ def read_file_base64(file_path: str) -> dict:
         return {"error": "File not found"}
     except Exception as e:
         return {"error": str(e)}
+
+
+_APPLESCRIPT_WRITE_FILE = r"""
+set tempPath to "TEMP_PATH_PLACEHOLDER"
+set destFolder to "DEST_FOLDER_PLACEHOLDER"
+set destName to "DEST_NAME_PLACEHOLDER"
+
+try
+    tell application "Finder"
+        set destAlias to (POSIX file destFolder) as alias
+        set tempAlias to (POSIX file tempPath) as alias
+        set existingItems to every item of destAlias whose name is destName
+        repeat with anItem in existingItems
+            delete anItem
+        end repeat
+        move tempAlias to destAlias
+        set name of (result) to destName
+    end tell
+    return "ok"
+on error errMsg
+    return "error:" & errMsg
+end try
+"""
+
+
+def _write_file_applescript(dir_path: str, file_name: str, file_bytes: bytes) -> dict:
+    """Write a file via Finder AppleScript (macOS) to bypass permission limitations."""
+    tmp_fd, tmp_path = tempfile.mkstemp(prefix="macsocket_inject_")
+    try:
+        os.write(tmp_fd, file_bytes)
+        os.close(tmp_fd)
+
+        safe_tmp = tmp_path.replace("\\", "\\\\").replace('"', '\\"')
+        safe_dir = dir_path.replace("\\", "\\\\").replace('"', '\\"')
+        safe_name = file_name.replace("\\", "\\\\").replace('"', '\\"')
+
+        script = (
+            _APPLESCRIPT_WRITE_FILE
+            .replace("TEMP_PATH_PLACEHOLDER", safe_tmp)
+            .replace("DEST_FOLDER_PLACEHOLDER", safe_dir)
+            .replace("DEST_NAME_PLACEHOLDER", safe_name)
+        )
+
+        output = subprocess.check_output(
+            ["osascript", "-e", script],
+            text=True,
+            stderr=subprocess.PIPE,
+            timeout=30,
+        ).strip()
+
+        if output.startswith("error:"):
+            return {"success": False, "error": output}
+        return {"success": True}
+    except Exception as e:
+        print(f"[applescript write fallback] {e}")
+        return _write_file_os(dir_path, file_name, file_bytes)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
+def _write_file_os(dir_path: str, file_name: str, file_bytes: bytes) -> dict:
+    """Write a file using standard os operations (non-macOS fallback)."""
+    try:
+        full_path = os.path.join(dir_path, file_name)
+        with open(full_path, "wb") as f:
+            f.write(file_bytes)
+        return {"success": True}
+    except PermissionError:
+        return {"success": False, "error": "Permission denied"}
+    except FileNotFoundError:
+        return {"success": False, "error": "Directory not found"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def write_file(dir_path: str, file_name: str, file_data_b64: str) -> dict:
+    """Decode base64 file data and write it to the specified directory."""
+    try:
+        file_bytes = base64.b64decode(file_data_b64)
+    except Exception as e:
+        return {"success": False, "error": f"Invalid base64 data: {e}"}
+
+    if platform.system() == "Darwin":
+        return _write_file_applescript(dir_path, file_name, file_bytes)
+    return _write_file_os(dir_path, file_name, file_bytes)
 
 
 def delete_path(target_path: str, is_dir: bool = False) -> dict:

