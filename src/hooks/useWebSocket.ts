@@ -16,6 +16,11 @@ export const useWebSocket = (url: string) => {
   const [browsingError, setBrowsingError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [injecting, setInjecting] = useState(false);
+  const [lastInjectResult, setLastInjectResult] = useState<{
+    success: boolean;
+    error?: string;
+  } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   const baseUrl = url.replace(/^wss:/, "https:").replace(/^ws:/, "http:");
@@ -111,6 +116,16 @@ export const useWebSocket = (url: string) => {
               console.error("Delete failed:", msg.data.error);
             }
             break;
+          case "inject_complete":
+            setInjecting(false);
+            setLastInjectResult({
+              success: msg.data.success,
+              error: msg.data.error,
+            });
+            if (!msg.data.success) {
+              console.error("Inject failed:", msg.data.error);
+            }
+            break;
           case "upload_list": {
             const deviceId = msg.data?.device_id as string | undefined;
             if (deviceId) {
@@ -201,6 +216,23 @@ export const useWebSocket = (url: string) => {
     }
   }, []);
 
+  const injectFile = useCallback(
+    (deviceId: string, path: string, fileName: string, fileData: string) => {
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        setInjecting(true);
+        setLastInjectResult(null);
+        ws.send(
+          JSON.stringify({
+            type: "inject_file",
+            data: { device_id: deviceId, path, file_name: fileName, file_data: fileData },
+          })
+        );
+      }
+    },
+    []
+  );
+
   const deleteFile = useCallback(
     (deviceId: string, path: string, isDir: boolean) => {
       const ws = wsRef.current;
@@ -237,9 +269,12 @@ export const useWebSocket = (url: string) => {
     browseDirectory,
     uploadFile,
     requestUploadList,
+    injectFile,
     deleteFile,
     getDownloadUrl,
     uploading,
     deleting,
+    injecting,
+    lastInjectResult,
   };
 };

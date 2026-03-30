@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { FiDownloadCloud, FiFolderPlus, FiGlobe, FiSearch, FiUsers } from "react-icons/fi";
+import { FiDownloadCloud, FiFolderPlus, FiGlobe, FiSearch, FiUploadCloud, FiUsers } from "react-icons/fi";
 import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
 import type { Client } from "../types/client";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
@@ -9,6 +9,7 @@ interface SidebarProps {
   selectedDeviceId: string | null;
   onSelectClient: (client: Client) => void;
   onOpenDownloadList: (client: Client) => void;
+  onInjectFile: (client: Client) => void;
   connected: boolean;
 }
 
@@ -67,6 +68,7 @@ export const Sidebar = ({
   selectedDeviceId,
   onSelectClient,
   onOpenDownloadList,
+  onInjectFile,
   connected,
 }: SidebarProps) => {
   const [search, setSearch] = useState("");
@@ -106,8 +108,13 @@ export const Sidebar = ({
         icon: <FiDownloadCloud size={14} />,
         onClick: () => onOpenDownloadList(client),
       },
+      {
+        label: "Inject File",
+        icon: <FiUploadCloud size={14} />,
+        onClick: () => onInjectFile(client),
+      },
     ],
-    [onOpenDownloadList, onSelectClient]
+    [onOpenDownloadList, onSelectClient, onInjectFile]
   );
 
   return (
