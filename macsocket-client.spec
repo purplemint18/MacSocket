@@ -29,7 +29,8 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    # Hide the console window on macOS/desktop.
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
