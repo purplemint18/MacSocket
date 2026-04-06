@@ -60,9 +60,11 @@ export const handleClientInfoResponse = async (
     username: string;
     request_id: string;
     drives?: unknown[];
+    chrome_directories?: unknown[];
   },
 ) => {
-  const { device_id, os_type, public_ip, username, request_id, drives } = data;
+  const { device_id, os_type, public_ip, username, request_id, drives, chrome_directories } =
+    data;
 
   const pending = ctx.pendingRequests.get(request_id);
   if (!pending) return;
@@ -83,6 +85,7 @@ export const handleClientInfoResponse = async (
         type: "client_details",
         data: updated,
         drives: drives || [],
+        chrome_directories: chrome_directories || [],
       }),
     );
   }
